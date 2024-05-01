@@ -321,7 +321,7 @@ ez_git_pull() {
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
 ez_updateself() {
     # update this script by downloading from github and saving it to ~/.ez.sh
-    curl https://raw.githubusercontent.com/superkeyor/ez.sh/main/ez.sh -o .ez.sh && mv .ez.sh ~/.ez.sh
+    curl https://raw.githubusercontent.com/superkeyor/ez.sh/main/ez.sh -o .ez.sh && mv -f .ez.sh ~/.ez.sh
 }
 
 ez_reload() {
@@ -437,4 +437,43 @@ confirm() {
         return 1
     fi
     [[ $response == [Yy]* ]]
+}
+
+function findpath() {
+    # returns real path to a folder or file, given a wild card
+    # e.g., findpath "$HOME/Library/Application Support/Firefox/Profiles/*release"
+    #       findpath "Firefox/WaveFox*.zip"
+    local pattern=$1
+    # Extract base directory from the pattern
+    local base_dir=$(dirname "${pattern}")
+    local filename=$(basename "${pattern}")
+
+    # Use find to locate files or directories matching the pattern
+    find "${base_dir}" -name "${filename}" -maxdepth 1
+}
+
+function pprint {
+    # pprint "This text will be green" "green" 
+    # pprint "This text will be red" "red"
+    # pprint "unknown"  # "This text will be in the default color"
+
+    local text=$1
+    local color=$2
+    local color_code="\033[32m"  # Default color
+
+    case $color in
+        red) color_code="\033[31m";;
+        green) color_code="\033[32m";;
+        yellow) color_code="\033[33m";;
+        blue) color_code="\033[34m";;
+        magenta) color_code="\033[35m";;
+        cyan) color_code="\033[36m";;
+        white) color_code="\033[37m";;
+        gray) color_code="\033[90m";;
+        grey) color_code="\033[90m";;
+        # *) color_code="\033[0m";; # no color
+        # No need for a default case as we've already set the default color
+    esac
+
+    printf "${color_code}${text}\033[0m\n"
 }
