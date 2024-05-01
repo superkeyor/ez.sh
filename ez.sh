@@ -1,22 +1,137 @@
 
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
-# > self maintenance
+# > docker
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
-ez_updateself() {
-    # update this script by downloading from github and saving it to ~/.ez.sh
-    curl -O https://raw.githubusercontent.com/superkeyor/ez.sh/main/ez.sh && mv ez.sh ~/.ez.sh
+ez_docker_up() {
+    local composefile=${1:-"/data/caddy/docker-compose.yml"}
+    sudo docker compose -f $composefile up -d
 }
 
-ez_reload() {
-    # reload this script
-    [ ! -f ~/.ez.sh ] && ez_updateself
-    source ~/.ez.sh
+ez_docker_down() {
+    local composefile=${1:-"/data/caddy/docker-compose.yml"}
+    sudo docker compose -f $composefile down
+}
+
+ez_docker_start() {
+    sudo docker start $1
+}
+
+ez_docker_stop() {
+    sudo docker stop $1
+}
+
+ez_docker_restart() {
+    sudo docker restart $1
+}
+
+ez_docker_logs() {
+    sudo docker logs -f $1
+}
+
+ez_docker_exec() {
+    local shell=${1:-"bash"}
+    sudo docker exec -it $1 $shell
+}
+
+ez_docker_rm() {
+    sudo docker rm $1
+}
+
+ez_docker_prune() {
+    sudo docker system prune -a
+    sudo docker system prune --force
+    sudo docker image prune --force
+}
+
+ez_docker_list() {
+    sudo docker ps -a
+    sudo docker images
+}
+
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+# > installer
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+ez_install_docker() {
+    # # DOCKER GROUP
+    # # https://github.com/moby/moby/issues/9976
+    # # not recommended??
+    # # if not exist run the following two:
+    # # sudo groupadd docker
+    # # sudo systemctl restart docker
+    # grep docker /etc/group
+    # sudo usermod -aG docker $USER
+    # reboot # to make effective
+    # groups $USER
+    # # being in the docker group essentially grants root access, without sudo
+    
+    # DOCKER PORTS
+    # https://askubuntu.com/a/652572/586989
+    # Docker makes changes directly on your iptables, which are not shown with ufw status.
+    # Bind containers locally so they are not exposed outside your machine
+    # docker run -p 127.0.0.1:8080:8080 ...
+    # if need to be available externally, simply 8080:8080, or use caddy to reverse_proxy localhost:8080
+    
+    # install docker
+    local version=${1:-"25.0"}
+    if [[ $(command -v docker) == "" ]]; then
+        sudo apt update # && sudo apt upgrade -y
+        echo "Installing Docker..."
+        curl -fsSL get.docker.com -o get-docker.sh 
+        sudo sh get-docker.sh --version $version
+        
+        sudo systemctl enable docker
+        sudo systemctl start docker
+
+        sudo usermod -aG docker $USER
+          
+        rm get-docker.sh
+        # logout required after usermod
+        echo "Logout/re-login to run docker without sudo"
+    else
+        echo "Docker already installed."
+        docker --version
+    fi
+}
+
+ez_install_caddy() {
+    if [[ $(command -v caddy) == "" ]]; then
+        echo "Installing Caddy..."
+        # https://caddyserver.com/docs/install#debian-ubuntu-raspbian
+        # install caddy so that I can have the service, even though later I recompile caddy
+        sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+        sudo apt update
+        sudo apt install caddy -y
+    else
+        echo "Caddy already installed."
+        caddy version
+    fi
+}
+
+ez_install_anaconda() {
+    local version=${1:-"2023.07"}
+    local architecture=$(uname -m)  # x86_64 or aarch64
+    local anacondaversion=$(echo "Anaconda3-${version}-Linux-${architecture}")
+    if [[ $(command -v $HOME/anaconda3/bin/python) == "" ]]; then
+        echo "Installing Anaconda..."
+        curl https://repo.anaconda.com/archive/${anacondaversion}.sh --output ${anacondaversion}.sh
+        bash ${anacondaversion}.sh
+        # no need to initialize Anaconda3 (my .bashrc has taken care of it)
+        # may need to restart bash?
+        $HOME/anaconda3/bin/conda activate base
+        pip install ez --upgrade --no-cache-dir
+        # for email via python
+    else
+        echo "Anaconda already installed."
+        $HOME/anaconda3/bin/python --version
+    fi
 }
 
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
 # > git and github
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
-ez_gitinit() {
+ez_git_init() {
     # .gitignore
 cat <<'EOF' | tee .gitignore >/dev/null
 # mypy
@@ -184,22 +299,142 @@ EOF
     echo "Ready to push."
 }
 
-ez_gitcommit() {
+ez_git_commit() {
     # commit with message (default: "update")
     local message=${1:-"update"}
     git add .
     git commit -m "$message"
 }
 
-ez_gitpush() {
+ez_git_push() {
     git branch -M main
     git push -u origin main
 }
 
-ez_gitpull() {
+ez_git_pull() {
     # pull from github
     git pull origin main
 }
 
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+# > self maintenance
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+ez_updateself() {
+    # update this script by downloading from github and saving it to ~/.ez.sh
+    curl https://raw.githubusercontent.com/superkeyor/ez.sh/main/ez.sh -o .ez.sh && mv .ez.sh ~/.ez.sh
+}
 
+ez_reload() {
+    # reload this script
+    [ ! -f ~/.ez.sh ] && ez_updateself
+    source ~/.ez.sh
+}
 
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+# > server management
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+ez_scp() {
+    # ez_scp "-p 22 root@192.168.1.1" :/root/rc.local.log ./r.log
+    # ssh root@192.168.1.1 "dd if='/root/rc.local.log' bs=1M" | dd of="./r.log" bs=1M status=progress
+    if [[ "$1" == "--help" || "$#" -ne 3 ]]; then
+        echo "Usage: ez_scp [remote_host] [source] [destination]"
+        echo "Description: Securely transfers files between local and remote locations using dd over SSH."
+        echo "             If source contains ':', it will download from remote to local."
+        echo "             If destination contains ':', it will upload from local to remote."
+        echo "Example: ez_scp "-p 22 user@hostname" /path/to/local/file :/path/to/remote/file"
+        echo "         ez_scp user@hostname :/path/to/remote/file /path/to/local/file"
+        return 0
+    fi
+
+    local remote_host=$1
+    local source=$2
+    local destination=$3
+
+    # Handle download from remote to local
+    if [[ "$source" == *:* ]]; then
+        local remote_path="${source#*:}"
+        echo "Starting download from: $remote_host:$remote_path to $destination"
+        ssh "$remote_host" "dd if='$remote_path' bs=1M" | dd of="$destination" bs=1M status=progress
+    # Handle upload from local to remote
+    elif [[ "$destination" == *:* ]]; then
+        local remote_path="${destination#*:}"
+        echo "Starting upload from: $source to $remote_host:$remote_path"
+        dd if="$source" bs=1M status=progress | ssh "$remote_host" "dd of='$remote_path' bs=1M"
+    else
+        echo "Error: Invalid path format. Please use format: user@hostname :/path/to/file or user@hostname /path/to/local/file :/path/to/remote/file"
+        return 1
+    fi
+}
+
+ez_restart() {
+    # restart only if enabled
+    service_name="${1}"
+    if systemctl list-units --type=service --all | grep -q "$service_name"; then
+        if systemctl is-enabled "$service_name" | grep -q "enabled"; then
+            echo "Restarting ${service_name} ..."
+            # legacy way: sudo service "$service_name" restart
+            sudo systemctl restart "$service_name"
+        fi
+    fi
+}
+
+ez_autostart() {
+    sudo systemctl enable --now $1
+}
+
+ez_start() {
+    sudo systemctl start $1
+}
+
+ez_stop() {
+    sudo systemctl stop $1
+}
+
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+# > general
+# ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+# ez_write "
+# a
+# b
+# " .demo.txt
+ez_write() {
+    local content="$1"
+    local filepath="${2:-/data/caddy/docker-compose.yml}"
+sudo cat <<EOF | sudo tee "$filepath" >/dev/null
+$content
+EOF
+}
+
+ez_append() {
+    local content="$1"
+    local filepath="${2:-/data/caddy/docker-compose.yml}"
+sudo cat <<EOF | sudo tee -a "$filepath" >/dev/null
+$content
+EOF
+}
+
+ez_mkdir() {
+    pth="${1}"
+    [ ! -d "${pth}" ] && sudo mkdir -p "${pth}"
+}
+
+pause() {
+    local message="${1:-Press any key to continue...}"
+    read -n1 -r -p "$message"
+}
+
+confirm() {
+    local message=$1
+    local quiet=$2
+    if [[ "$quiet" == "-q" || "$quiet" == "--quiet" ]]; then
+        echo "$message ([y]/n):"  # Optionally display the message
+        return 0         # Automatically confirm
+    fi
+    read -p "$message ([y]/n): " response
+    response=${response:-y}
+    if [[ $response == [Nn]* ]]; then
+        echo "User cancelled."
+        return 1
+    fi
+    [[ $response == [Yy]* ]]
+}
