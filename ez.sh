@@ -51,6 +51,32 @@ ez_docker_list() {
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
 # > installer
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
+ez_install_restic() {
+    # https://restic.net/
+    # https://restic.readthedocs.io/en/stable/020_installation.html
+    if [[ $(command -v restic) == "" ]]; then
+        echo "Installing Restic..."
+        sudo apt update
+        sudo apt install restic -y
+        # sudo restic self-update
+    else
+        echo "Restic already installed."
+        restic version  # # restic 0.12.1
+    fi
+}
+
+ez_install_rclone() {
+    # https://rclone.org/install/
+    if [[ $(command -v rclone) == "" ]]; then
+        echo "Installing Rclone..."
+        curl https://rclone.org/install.sh | sudo bash
+        rm install.sh
+    else
+        echo "Rclone already installed."
+        rclone version  # rclone v1.66.0
+    fi
+}
+
 ez_install_docker() {
     # # DOCKER GROUP
     # # https://github.com/moby/moby/issues/9976
@@ -116,12 +142,12 @@ ez_install_anaconda() {
     if [[ $(command -v $HOME/anaconda3/bin/python) == "" ]]; then
         echo "Installing Anaconda..."
         curl https://repo.anaconda.com/archive/${anacondaversion}.sh --output ${anacondaversion}.sh
+        pause "Author's note: No need to initialize Anaconda3 (my .bashrc has taken care of it)"
         bash ${anacondaversion}.sh
-        # no need to initialize Anaconda3 (my .bashrc has taken care of it)
         # may need to restart bash?
         $HOME/anaconda3/bin/conda activate base
         pip install ez --upgrade --no-cache-dir
-        # for email via python
+        rm ${anacondaversion}.sh
     else
         echo "Anaconda already installed."
         $HOME/anaconda3/bin/python --version
@@ -379,15 +405,24 @@ ez_restart() {
 }
 
 ez_autostart() {
-    sudo systemctl enable --now $1
+    # enable and start a service only if exists
+    if [[ ! $(command -v $1) == "" ]]; then
+        sudo systemctl enable --now $1
+    fi
 }
 
 ez_start() {
-    sudo systemctl start $1
+    # start only if exists
+    if [[ ! $(command -v $1) == "" ]]; then
+        sudo systemctl start $1
+    fi
 }
 
 ez_stop() {
-    sudo systemctl stop $1
+    # stop only if exists
+    if [[ ! $(command -v $1) == "" ]]; then
+        sudo systemctl stop $1
+    fi
 }
 
 # ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><
